@@ -108,15 +108,15 @@ export function computeSeoChanges(
   const changes: ContentChange[] = [];
 
   for (const field of SEO_METADATA_FIELDS) {
-    const value = proposed[field];
-
     if (field === "focus_keywords") {
-      if (value !== undefined && !arraysEqual(current.focus_keywords ?? [], value)) {
-        changes.push({ field, from: current.focus_keywords ?? [], to: value });
+      const keywords = proposed.focus_keywords;
+      if (keywords !== undefined && !arraysEqual(current.focus_keywords ?? [], keywords)) {
+        changes.push({ field, from: current.focus_keywords ?? [], to: keywords });
       }
       continue;
     }
 
+    const value = proposed[field];
     if (value === undefined || value === current[field]) {
       continue;
     }
