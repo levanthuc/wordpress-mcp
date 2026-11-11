@@ -192,6 +192,8 @@ export type SeoMetadataDto = {
   og_title: string;
   og_description: string;
   noindex: boolean;
+  focus_keywords?: string[];
+  pillar_content?: boolean;
 };
 
 export type SeoFinding = {
@@ -246,7 +248,7 @@ const PROTOCOL_FIELDS: Record<DtoKind, ReadonlySet<string>> = {
     "wp_max_upload_size_bytes",
   ]),
   robots: new Set(["content", "source"]),
-  seo_metadata: new Set(["id", "provider", "title", "description", "canonical", "og_title", "og_description", "noindex", "audit"]),
+  seo_metadata: new Set(["id", "provider", "title", "description", "canonical", "og_title", "og_description", "noindex", "focus_keywords", "pillar_content", "audit"]),
   seo_audit: new Set(["findings"]),
   content: new Set([
     "id",
