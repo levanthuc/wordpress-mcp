@@ -1930,7 +1930,7 @@ export function createMcpServer(registry: SiteRegistry, options: McpServerOption
       name: "wordpress_get_seo",
       title: "Get SEO metadata and optional audit",
       description:
-        "Returns title, meta description, canonical, Open Graph, and noindex for a post or page. Set audit: true to include on-site SEO issue findings.",
+        "Returns SEO title, description, canonical, Open Graph, noindex, and Rank Math focus_keywords/pillar_content. Set audit: true for basic on-site checks.",
       inputSchema: getSeoSchema,
       access: "read",
       dto: { kind: "seo_metadata" },
@@ -1963,6 +1963,9 @@ export function createMcpServer(registry: SiteRegistry, options: McpServerOption
     og_title: z.string().optional(),
     og_description: z.string().optional(),
     noindex: z.boolean().optional(),
+    focus_keywords: z.array(z.string().trim().min(1).max(190).refine((v) => !v.includes(","), "Keywords cannot contain commas")).max(5).optional()
+      .describe("Rank Math only. Ordered list of up to five focus keywords, first is primary. [] clears keywords."),
+    pillar_content: z.boolean().optional().describe("Rank Math only. True marks the post as pillar content."),
   };
 
   const updateSeoSchema = z.object({
@@ -1990,7 +1993,7 @@ export function createMcpServer(registry: SiteRegistry, options: McpServerOption
       name: "wordpress_update_seo",
       title: "Update SEO metadata for a post/page",
       description:
-        "Sets SEO fields on a post or page. Use apply_fixes: true to apply a batch of fixes in one call. Always requires confirm: true after reviewing the proposed diff.",
+        "Sets SEO fields including Rank Math focus_keywords (up to 5) and pillar_content. Rank Math-only fields require Rank Math to be active. Always requires confirm: true.",
       inputSchema: updateSeoSchema,
       access: "write",
       dto: { kind: "seo_metadata" },
@@ -2015,6 +2018,124 @@ export function createMcpServer(registry: SiteRegistry, options: McpServerOption
         content: [{ type: "text", text: `Updated SEO metadata for post #${args.post_id} on site "${siteId}".` }],
         structuredContent: withSiteMeta(siteId, result),
       };
+    },
+  );
+
+
+  // Tongluc workflow: create or resume a draft, save metadata and verify read-back.
+  // The existing wordpress_update_content tool remains the only publishing path.
+  const seoDraftSchema = z.object({
+    site: siteSchema,
+    post_id: z.number().int().positive().optional()
+      .describe("Existing draft ID for retry after partial failure; never accepts a published/private post."),
+    type: z.enum(["post", "page"]).optional(),
+    title: z.string().min(1),
+    content: z.string().min(1).describe("Reviewed HTML content."),
+    excerpt: z.string().optional(),
+    slug: z.string().optional(),
+    categories: z.array(z.number().int().positive()).optional(),
+    tags: z.array(z.string()).optional(),
+    featured_media: z.number().int().positive().optional()
+      .describe("Existing verified WordPress image attachment ID. Upload media separately first."),
+    seo: z.object({
+      ...seoMetadataFieldsSchema,
+      title: z.string().min(1),
+      description: z.string().min(1),
+    }),
+    confirm: z.boolean().optional().default(false)
+      .describe("Required to create or replace the draft. Review the preview first."),
+  });
+  type SeoDraftArgs = z.infer<typeof seoDraftSchema>;
+
+  registerWordPressTool(
+    server,
+    registry,
+    options,
+    {
+      name: "tongluc_create_seo_draft",
+      title: "Create or resume verified SEO draft",
+      description:
+        "Create or resume a WordPress draft with full content, featured image ID, SEO Title, Description, Rank Math focus keywords and pillar status. Performs read-back verification. Requires confirm: true, never publishes. On partial failure returns post_id for safe retry.",
+      inputSchema: seoDraftSchema,
+      access: "write",
+    },
+    async ({ client, siteId, args }: ToolContext<SeoDraftArgs>) => {
+      const existing = args.post_id
+        ? await client.get<ContentDto>(`/content/${args.post_id}`)
+        : undefined;
+
+      if (existing && (existing.status !== "draft" || (args.type && existing.type !== args.type))) {
+        return {
+          content: [{ type: "text", text: "Cannot replace a published, private, scheduled, or mismatched post. Only drafts can be resumed." }],
+          structuredContent: withSiteMeta(siteId, { post_id: args.post_id, status: existing.status }),
+          isError: true,
+        };
+      }
+
+      const { site: _site, post_id: _postId, seo: _seo, confirm: _confirm, ...contentFields } = args;
+      const draftFields = { ...contentFields, type: args.type ?? existing?.type ?? "post", status: "draft" };
+
+      if (!args.confirm) {
+        return confirmationRequired(
+          `Review SEO draft ${args.post_id ? "#" + args.post_id : "(new)"} for site "${siteId}", then re-run with confirm: true. This will not publish.`,
+          withSiteMeta(siteId, {
+            post_id: args.post_id ?? null,
+            content_changes: existing ? computeContentChanges(existing, draftFields) : draftFields,
+            seo: args.seo,
+          }),
+        );
+      }
+
+      let saved: ContentDto;
+      if (existing) {
+        const { type: _type, ...updates } = draftFields;
+        saved = await client.patch<ContentDto>(`/content/${existing.id}`, updates);
+      } else {
+        saved = await client.post<ContentDto>("/content", draftFields);
+      }
+
+      // This is a two-step REST workflow, not an atomic database transaction.
+      // Never auto-delete a draft on SEO failure; return the ID for retry.
+      try {
+        await client.patch<SeoMetadataDto>(`/seo/metadata/${saved.id}`, args.seo);
+        const actualSeo = await client.get<SeoMetadataDto>(`/seo/metadata/${saved.id}`);
+        const differences = computeSeoChanges(actualSeo, args.seo);
+        const actualContent = await client.get<ContentDto>(`/content/${saved.id}`);
+        const contentDifferences = computeContentChanges(actualContent, draftFields);
+        const verified = differences.length === 0 && contentDifferences.length === 0 && actualContent.status === "draft";
+
+        return {
+          content: [{
+            type: "text",
+            text: verified
+              ? `SEO draft #${saved.id} saved and metadata verified on site "${siteId}". Not published.`
+              : `SEO draft #${saved.id} saved, but read-back verification found differences. Not published.`,
+          }],
+          structuredContent: withSiteMeta(siteId, {
+            post_id: saved.id,
+            status: actualContent.status,
+            featured_media: actualContent.featured_media ?? 0,
+            seo: actualSeo,
+            verification: { passed: verified, seo_differences: differences, content_differences: contentDifferences },
+          }),
+          isError: !verified,
+        };
+      } catch (error) {
+        const detail = executionError(error);
+        return {
+          content: [{
+            type: "text",
+            text: `Draft #${saved.id} was saved but SEO metadata failed: ${detail.content[0]?.text ?? "unknown"}. Re-run with post_id=${saved.id} to avoid duplicates.`,
+          }],
+          structuredContent: withSiteMeta(siteId, {
+            post_id: saved.id,
+            status: "draft",
+            seo_saved: false,
+            ...(detail.structuredContent ? { seo_error: detail.structuredContent } : {}),
+          }),
+          isError: true,
+        };
+      }
     },
   );
 

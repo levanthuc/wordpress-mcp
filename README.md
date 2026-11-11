@@ -110,6 +110,10 @@ make prod-tunnel      # + ngrok (set NGROK_AUTHTOKEN)
 2. Connect ChatGPT with **Mixed** auth — [docs/CHATGPT-SETUP.md](docs/CHATGPT-SETUP.md)
 3. Build release zip: `make plugin-release`
 
+## Tongluc SEO Publisher extension (fork)
+
+This fork adds Rank Math `focus_keywords` and `pillar_content` fields to the existing SEO metadata tools, plus a confirmation-gated `tongluc_create_seo_draft` tool for saving and verifying unpublished posts/pages. See [Tongluc SEO Publisher documentation](docs/TONGLUC-SEO-PUBLISHER.md) for usage, limitations, rollout and safety notes. This extension is not present in the upstream JOOservices release.
+
 ## MCP tools
 
 | Tool | Access |

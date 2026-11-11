@@ -91,4 +91,26 @@ describe("computeSeoChanges", () => {
       { field: "noindex", from: false, to: true },
     ]);
   });
+
+  it("detects Rank Math keyword and pillar changes", () => {
+    expect(computeSeoChanges(currentSeo, {
+      focus_keywords: ["hầm cầu đầy", "hút hầm cầu Quảng Ngãi"],
+      pillar_content: true,
+    })).toEqual([
+      { field: "focus_keywords", from: [], to: ["hầm cầu đầy", "hút hầm cầu Quảng Ngãi"] },
+      { field: "pillar_content", from: null, to: true },
+    ]);
+  });
+
+  it("does not flag identical keyword arrays as changes", () => {
+    const seo: SeoMetadataDto = { ...currentSeo, focus_keywords: ["one", "two"], pillar_content: false };
+    expect(computeSeoChanges(seo, { focus_keywords: ["one", "two"], pillar_content: false })).toEqual([]);
+  });
+
+  it("detects clearing keywords", () => {
+    const seo: SeoMetadataDto = { ...currentSeo, focus_keywords: ["one"] };
+    expect(computeSeoChanges(seo, { focus_keywords: [] })).toEqual([
+      { field: "focus_keywords", from: ["one"], to: [] },
+    ]);
+  });
 });
