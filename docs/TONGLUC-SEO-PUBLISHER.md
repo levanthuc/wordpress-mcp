@@ -60,6 +60,7 @@ A previous test on `huthamcautancuong.com` encountered `MEDIA_VERIFY_FAILED` / `
 This branch is **not deployed** automatically:
 
 - Back up the current fork, `.env.prod`, OAuth storage, and installed WordPress plugin.
+- Preserve the production OAuth discovery fix: this fork includes `GET /.well-known/oauth-protected-resource` in `packages/mcp-server/src/auth/setup.ts`; verify both this root alias and the `/mcp`-specific protected resource endpoint after deploying.
 - Build and test both the PHP plugin and Node MCP server in a staging environment.
 - Install the updated WordPress plugin first, then build/deploy the updated MCP server.
 - Do not change `MCP_PUBLISH=127.0.0.1:3100:3000` in your Mac's `.env.prod`. Host port 3000 belongs to a different service.
