@@ -2466,7 +2466,7 @@ final class RestRegistrar
                 ['error' => $result['error']],
                 $this->durationMs($startedAt),
             );
-            $err = ErrorCodes::error((string) $result['error'], 'Failed to update SEO metadata.', 404);
+            $err = ErrorCodes::error((string) $result['error'], 'Failed to update SEO metadata.', $result['error'] === ErrorCodes::INVALID_ARGUMENT ? 400 : 404);
 
             return new WP_Error($err['code'], $err['message'], $err['data']);
         }
@@ -2518,7 +2518,7 @@ final class RestRegistrar
                 ['error' => $result['error']],
                 $this->durationMs($startedAt),
             );
-            $err = ErrorCodes::error((string) $result['error'], 'Failed to apply SEO fix.', 404);
+            $err = ErrorCodes::error((string) $result['error'], 'Failed to apply SEO fix.', $result['error'] === ErrorCodes::INVALID_ARGUMENT ? 400 : 404);
 
             return new WP_Error($err['code'], $err['message'], $err['data']);
         }
