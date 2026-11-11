@@ -22,6 +22,9 @@ final class SeoService
     /** @var list<string> */
     private const FIELDS = ['title', 'description', 'canonical', 'og_title', 'og_description', 'noindex'];
 
+    /** Rank Math Free supports five focus keywords by default. */
+    private const MAX_FOCUS_KEYWORDS = 5;
+
     public function detectProvider(): string
     {
         if (defined('WPSEO_VERSION')) {
@@ -147,12 +150,61 @@ final class SeoService
 
         $provider = $this->detectProvider();
 
+        // Validate every Rank Math-only value before writing any metadata.
+        // Otherwise a mixed title + keywords request could partially succeed.
+        $hasKeywords = array_key_exists('focus_keywords', $fields);
+        $hasPillar = array_key_exists('pillar_content', $fields);
+
+        if (($hasKeywords || $hasPillar) && $provider !== 'rank_math') {
+            return ['error' => ErrorCodes::INVALID_ARGUMENT];
+        }
+
+        if ($hasPillar && ! is_bool($fields['pillar_content'])) {
+            return ['error' => ErrorCodes::INVALID_ARGUMENT];
+        }
+
+        $keywords = [];
+        if ($hasKeywords) {
+            if (! is_array($fields['focus_keywords']) || count($fields['focus_keywords']) > self::MAX_FOCUS_KEYWORDS) {
+                return ['error' => ErrorCodes::INVALID_ARGUMENT];
+            }
+
+            $seen = [];
+            foreach ($fields['focus_keywords'] as $keyword) {
+                if (! is_string($keyword)) {
+                    return ['error' => ErrorCodes::INVALID_ARGUMENT];
+                }
+
+                $clean = sanitize_text_field(trim($keyword));
+                if ($clean === '' || str_contains($clean, ',') || strlen($clean) > 512) {
+                    return ['error' => ErrorCodes::INVALID_ARGUMENT];
+                }
+
+                $normalized = strtolower($clean);
+                if (isset($seen[$normalized])) {
+                    return ['error' => ErrorCodes::INVALID_ARGUMENT];
+                }
+
+                $seen[$normalized] = true;
+                $keywords[] = $clean;
+            }
+        }
+
         foreach (self::FIELDS as $field) {
             if (! array_key_exists($field, $fields)) {
                 continue;
             }
 
             $this->writeField($postId, $provider, $field, $fields[$field]);
+        }
+
+        if ($provider === 'rank_math') {
+            if ($hasKeywords) {
+                update_post_meta($postId, 'rank_math_focus_keyword', implode(', ', $keywords));
+            }
+            if ($hasPillar) {
+                update_post_meta($postId, 'rank_math_pillar_content', $fields['pillar_content'] ? 'on' : 'off');
+            }
         }
 
         if ($provider === 'yoast') {
@@ -186,6 +238,11 @@ final class SeoService
             'og_title' => (string) $this->readField($postId, $provider, 'og_title'),
             'og_description' => (string) $this->readField($postId, $provider, 'og_description'),
             'noindex' => (bool) $this->readField($postId, $provider, 'noindex'),
+            'focus_keywords' => $provider === 'rank_math'
+                ? array_values(array_filter(array_map('trim', explode(',', (string) get_post_meta($postId, 'rank_math_focus_keyword', true))), static fn(string $keyword): bool => $keyword !== ''))
+                : [],
+            'pillar_content' => $provider === 'rank_math'
+                && (string) get_post_meta($postId, 'rank_math_pillar_content', true) === 'on',
         ];
     }
 
