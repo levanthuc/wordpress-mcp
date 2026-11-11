@@ -32,6 +32,19 @@ export function setupOAuth(app: Express, config: Config): OAuthRuntime {
   const mcpResourceUrl = new URL("/mcp", publicUrl);
   const issuerUrl = new URL(config.oauthIssuerUrl || publicUrl.origin);
 
+  // Some MCP clients probe the origin-root protected-resource metadata URL
+  // before requesting the resource-specific /mcp metadata endpoint.
+  // Keep this discovery alias in the fork: the production ChatGPT connector
+  // required it during its initial setup.
+  app.get("/.well-known/oauth-protected-resource", (_req, res) => {
+    res.json({
+      resource: mcpResourceUrl.href,
+      authorization_servers: [issuerUrl.href],
+      scopes_supported: SCOPES_SUPPORTED,
+      resource_name: "WordPress MCP",
+    });
+  });
+
   const validateResource = (resource: URL | undefined): boolean => {
     if (!resource) {
       return false;
