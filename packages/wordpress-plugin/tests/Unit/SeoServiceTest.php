@@ -193,7 +193,7 @@ final class SeoServiceTest extends TestCase
     public function it_reads_writes_and_clears_rank_math_focus_keywords_and_pillar_content(): void
     {
         if (! class_exists('RankMath', false)) {
-            class_alias(\\stdClass::class, 'RankMath');
+            class_alias(\stdClass::class, 'RankMath');
         }
 
         $GLOBALS['wp_test_posts'][17] = new WP_Post(17, '<h2>Test</h2>');
@@ -226,7 +226,7 @@ final class SeoServiceTest extends TestCase
     public function it_rejects_invalid_rank_math_fields_without_partial_writes(): void
     {
         if (! class_exists('RankMath', false)) {
-            class_alias(\\stdClass::class, 'RankMath');
+            class_alias(\stdClass::class, 'RankMath');
         }
 
         $GLOBALS['wp_test_posts'][18] = new WP_Post(18, '');
