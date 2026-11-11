@@ -82,6 +82,8 @@ export interface ProposedSeoMetadataUpdate {
   og_title?: string;
   og_description?: string;
   noindex?: boolean;
+  focus_keywords?: string[];
+  pillar_content?: boolean;
 }
 
 const SEO_METADATA_FIELDS = [
@@ -91,6 +93,8 @@ const SEO_METADATA_FIELDS = [
   "og_title",
   "og_description",
   "noindex",
+  "focus_keywords",
+  "pillar_content",
 ] as const;
 
 /**
@@ -105,6 +109,13 @@ export function computeSeoChanges(
 
   for (const field of SEO_METADATA_FIELDS) {
     const value = proposed[field];
+
+    if (field === "focus_keywords") {
+      if (value !== undefined && !arraysEqual(current.focus_keywords ?? [], value)) {
+        changes.push({ field, from: current.focus_keywords ?? [], to: value });
+      }
+      continue;
+    }
 
     if (value === undefined || value === current[field]) {
       continue;
