@@ -6,6 +6,8 @@ namespace JOOservices\WordPressMcp\Tests\Unit;
 
 use JOOservices\WordPressMcp\Services\SeoService;
 use JOOservices\WordPressMcp\Support\ErrorCodes;
+use PHPUnit\Framework\Attributes\PreserveGlobalState;
+use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use WP_Post;
@@ -181,6 +183,67 @@ final class SeoServiceTest extends TestCase
             self::assertSame('Yoast SEO Description', $GLOBALS['wp_test_postmeta'][1]['_yoast_wpseo_metadesc']);
         } finally {
             unset($GLOBALS['wp_test_yoast_clears_metadesc_on_title']);
+        }
+    }
+
+
+    #[Test]
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function it_reads_writes_and_clears_rank_math_focus_keywords_and_pillar_content(): void
+    {
+        if (! class_exists('RankMath', false)) {
+            class_alias(\\stdClass::class, 'RankMath');
+        }
+
+        $GLOBALS['wp_test_posts'][17] = new WP_Post(17, '<h2>Test</h2>');
+
+        $updated = $this->service->updateSeoMetadata(17, [
+            'title' => 'SEO Test',
+            'description' => 'Rank Math metadata',
+            'focus_keywords' => ['hầm cầu đầy', 'hút hầm cầu Quảng Ngãi'],
+            'pillar_content' => true,
+        ]);
+
+        self::assertSame('rank_math', $updated['provider']);
+        self::assertSame(['hầm cầu đầy', 'hút hầm cầu Quảng Ngãi'], $updated['focus_keywords']);
+        self::assertTrue($updated['pillar_content']);
+        self::assertSame('hầm cầu đầy, hút hầm cầu Quảng Ngãi', $GLOBALS['wp_test_postmeta'][17]['rank_math_focus_keyword']);
+        self::assertSame('on', $GLOBALS['wp_test_postmeta'][17]['rank_math_pillar_content']);
+
+        $cleared = $this->service->updateSeoMetadata(17, [
+            'focus_keywords' => [],
+            'pillar_content' => false,
+        ]);
+        self::assertSame([], $cleared['focus_keywords']);
+        self::assertFalse($cleared['pillar_content']);
+        self::assertSame('off', $GLOBALS['wp_test_postmeta'][17]['rank_math_pillar_content']);
+    }
+
+    #[Test]
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function it_rejects_invalid_rank_math_fields_without_partial_writes(): void
+    {
+        if (! class_exists('RankMath', false)) {
+            class_alias(\\stdClass::class, 'RankMath');
+        }
+
+        $GLOBALS['wp_test_posts'][18] = new WP_Post(18, '');
+
+        foreach ([
+            ['focus_keywords' => ['one', 'two', 'three', 'four', 'five', 'six']],
+            ['focus_keywords' => ['valid', 'valid']],
+            ['focus_keywords' => ['contains,comma']],
+            ['focus_keywords' => 'not-an-array'],
+            ['pillar_content' => 'on'],
+        ] as $bad) {
+            $result = $this->service->updateSeoMetadata(18, [
+                'title' => 'Must not be saved',
+                ...$bad,
+            ]);
+            self::assertSame(['error' => ErrorCodes::INVALID_ARGUMENT], $result);
+            self::assertArrayNotHasKey('rank_math_title', $GLOBALS['wp_test_postmeta'][18] ?? []);
         }
     }
 
