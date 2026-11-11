@@ -2101,7 +2101,8 @@ export function createMcpServer(registry: SiteRegistry, options: McpServerOption
         const actualSeo = await client.get<SeoMetadataDto>(`/seo/metadata/${saved.id}`);
         const differences = computeSeoChanges(actualSeo, args.seo);
         const actualContent = await client.get<ContentDto>(`/content/${saved.id}`);
-        const verified = differences.length === 0 && actualContent.status === "draft";
+        const contentDifferences = computeContentChanges(actualContent, draftFields);
+        const verified = differences.length === 0 && contentDifferences.length === 0 && actualContent.status === "draft";
 
         return {
           content: [{
@@ -2115,7 +2116,7 @@ export function createMcpServer(registry: SiteRegistry, options: McpServerOption
             status: actualContent.status,
             featured_media: actualContent.featured_media ?? 0,
             seo: actualSeo,
-            verification: { passed: verified, seo_differences: differences },
+            verification: { passed: verified, seo_differences: differences, content_differences: contentDifferences },
           }),
           isError: !verified,
         };
